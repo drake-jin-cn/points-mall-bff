@@ -13,11 +13,17 @@
 - **OpenAPI / Swagger** — auto-generated interactive docs at `/api-docs`
 - **RabbitMQ Producer** — publishes domain events (`order_completed`, `points_issued`, `attendance_anomaly`) for async processing
 
+## Why This Tech Stack
+
+NestJS is the only Node.js framework that mirrors Spring Boot's architectural thinking: modules, decorators, dependency injection, and a CLI scaffold that enforces structure. For a BFF that aggregates multiple downstream services, this structure is essential — it keeps route handlers, guards, interceptors, and pipes all in their designated places without relying on team discipline.
+
+TypeScript is non-negotiable at the BFF layer because the BFF is the contract boundary between frontend and backend. Typed request/response shapes catch mismatches at compile time rather than at 2 AM in production.
+
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Framework | NestJS 10, TypeScript |
+| Framework | NestJS 11, TypeScript 5.8 |
 | Auth | Passport.js, `@nestjs/jwt`, bcrypt |
 | Validation | class-validator, class-transformer, Zod (shared schema with frontend) |
 | Cache | ioredis + Redis |
