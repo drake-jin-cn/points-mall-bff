@@ -7,7 +7,13 @@
     "dev": "nest start --watch",
     "start": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "jest"
+  },
+  "lint-staged": {
+    "*.{ts,js}": ["eslint --fix", "prettier --write"],
+    "*.{json,md}": ["prettier --write"]
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -23,6 +29,8 @@
     "@nestjs/testing": "^11.0.0",
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
+    "lint-staged": "^17.0.8",
+    "prettier": "^3.8.4",
     "typescript": "^5.8.0"
   }
 }

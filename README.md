@@ -32,6 +32,13 @@ TypeScript is non-negotiable at the BFF layer because the BFF is the contract bo
 | Docs | `@nestjs/swagger` — auto-generated OpenAPI spec |
 | Logging | Winston with structured JSON logs |
 
+## Docker
+
+```bash
+docker build -t points-mall-bff .
+docker run --env-file .env.dev -p 4000:4000 points-mall-bff
+```
+
 ## Local Development
 
 ```bash
@@ -54,6 +61,16 @@ DATA_SERVICE_URL=http://localhost:8083
 THIRDPARTY_SERVICE_URL=http://localhost:8084
 RABBITMQ_URL=amqp://localhost:5672
 ```
+
+## Code Quality
+
+```bash
+pnpm lint          # ESLint
+pnpm format:check  # Prettier (check only)
+pnpm format        # Prettier (auto-fix)
+```
+
+Formatting and linting run automatically on staged files via the pre-commit hook. CI runs on every PR via `.github/workflows/ci.yml` in this repository.
 
 ## Architecture Note
 
