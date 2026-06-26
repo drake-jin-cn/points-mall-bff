@@ -12,10 +12,14 @@ import { GlobalExceptionFilter } from '../../common/global-exception.filter';
 
 describe('AuthController (integration)', () => {
   let app: INestApplication;
-  let authService: jest.Mocked<Pick<AuthService, 'login'>>;
+  let authService: jest.Mocked<Pick<AuthService, 'login' | 'refresh' | 'logout'>>;
 
   beforeAll(async () => {
-    const mockAuthService = { login: jest.fn() };
+    const mockAuthService = {
+      login: jest.fn(),
+      refresh: jest.fn(),
+      logout: jest.fn(),
+    };
     const mockJwtService = { verify: jest.fn() };
     const mockConfigService = {
       getOrThrow: jest.fn((key: string) => {
@@ -104,5 +108,80 @@ describe('AuthController (integration)', () => {
       .post('/auth/login')
       .send({ email: 'admin@pointsmall.com', password: 'Password123!' });
     expect(res.status).toBe(200); // confirms @Public() works — no 401
+  });
+
+  describe('POST /auth/refresh', () => {
+    it('AC-01: success returns 200 with user info', async () => {
+      (authService.refresh as jest.Mock).mockResolvedValue({
+        user: { id: 1, email: 'admin@pointsmall.com', roles: ['admin'] },
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', 'access_token=any-token-here');
+
+      expect(res.status).toBe(200);
+      expect(res.body.code).toBe('OK');
+      expect(res.body.data.user.email).toBe('admin@pointsmall.com');
+    });
+
+    it('AC-05: service throws bff-2003 → 401 with code bff-2003', async () => {
+      const err = Object.assign(
+        new UnauthorizedException('Invalid token'),
+        { bffCode: 'bff-2003', traceId: 'trace-abc' },
+      );
+      (authService.refresh as jest.Mock).mockRejectedValue(err);
+
+      const res = await request(app.getHttpServer()).post('/auth/refresh');
+
+      expect(res.status).toBe(401);
+      expect(res.body.code).toBe('bff-2003');
+      expect(res.body.traceId).toBeDefined();
+    });
+
+    it('AC-06: service throws bff-2004 → 401 with code bff-2004', async () => {
+      const err = Object.assign(
+        new UnauthorizedException('Session expired, please login again'),
+        { bffCode: 'bff-2004', traceId: 'trace-def' },
+      );
+      (authService.refresh as jest.Mock).mockRejectedValue(err);
+
+      const res = await request(app.getHttpServer()).post('/auth/refresh');
+
+      expect(res.status).toBe(401);
+      expect(res.body.code).toBe('bff-2004');
+    });
+
+    it('AC-10: /auth/refresh accessible without access_token cookie (@Public)', async () => {
+      (authService.refresh as jest.Mock).mockResolvedValue({
+        user: { id: 1, email: 'admin@pointsmall.com', roles: ['admin'] },
+      });
+
+      const res = await request(app.getHttpServer()).post('/auth/refresh');
+
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('POST /auth/logout', () => {
+    it('AC-07: valid token → 200, service.logout called with userId', async () => {
+      (authService.logout as jest.Mock).mockResolvedValue(undefined);
+      const mockJwt = app.get(JwtService);
+      (mockJwt.verify as jest.Mock).mockReturnValue({ sub: 1, email: 'a@b.com', roles: ['admin'] });
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/logout')
+        .set('Cookie', 'access_token=valid-token');
+
+      expect(res.status).toBe(200);
+      expect(res.body.code).toBe('OK');
+      expect(authService.logout).toHaveBeenCalledWith(1, expect.anything());
+    });
+
+    it('AC-08: no access_token cookie → 401 from JwtAuthGuard', async () => {
+      const res = await request(app.getHttpServer()).post('/auth/logout');
+
+      expect(res.status).toBe(401);
+    });
   });
 });

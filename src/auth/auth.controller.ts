@@ -34,4 +34,27 @@ export class AuthController {
     );
     return ok(result);
   }
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token: string | undefined = req.cookies?.['access_token'];
+    const result = await this.authService.refresh(token, res);
+    return ok(result);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const userId = (req as any).user?.sub as number;
+    await this.authService.logout(userId, res);
+    return ok(null);
+  }
 }
