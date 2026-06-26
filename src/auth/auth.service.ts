@@ -120,4 +120,57 @@ export class AuthService {
       { bffCode: 'bff-2099', traceId },
     );
   }
+
+  async refresh(
+    expiredToken: string | undefined,
+    res: Response,
+  ): Promise<{ user: { id: number; email: string; roles: string[] } }> {
+    if (!expiredToken) {
+      throw Object.assign(new UnauthorizedException('Invalid token'), {
+        bffCode: 'bff-2003',
+      });
+    }
+
+    const payload = this.jwtService.decode(expiredToken);
+    if (!payload || typeof payload !== 'object' || typeof (payload as any).sub !== 'number') {
+      throw Object.assign(new UnauthorizedException('Invalid token'), {
+        bffCode: 'bff-2003',
+      });
+    }
+
+    const { sub, email, roles } = payload as { sub: number; email: string; roles: string[] };
+
+    const exists = await this.redisService.exists(`refresh:${sub}`);
+    if (!exists) {
+      throw Object.assign(new UnauthorizedException('Session expired, please login again'), {
+        bffCode: 'bff-2004',
+      });
+    }
+
+    const jwtSecret = this.config.getOrThrow<string>('JWT_SECRET');
+    const accessExpiresIn = this.config.get<string>('JWT_ACCESS_EXPIRES_IN', '15m');
+
+    const newToken = this.jwtService.sign(
+      { sub, email, roles },
+      { secret: jwtSecret, expiresIn: accessExpiresIn as any },
+    );
+
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    res.cookie('access_token', newToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000,
+      path: '/',
+    });
+
+    this.logger.log(`Token refreshed for userId=${sub}`);
+    return { user: { id: sub, email, roles } };
+  }
+
+  async logout(userId: number, res: Response): Promise<void> {
+    await this.redisService.del(`refresh:${userId}`);
+    res.clearCookie('access_token', { path: '/' });
+    this.logger.log(`User logged out userId=${userId}`);
+  }
 }

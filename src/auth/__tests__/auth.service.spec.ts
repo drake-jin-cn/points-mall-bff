@@ -23,7 +23,10 @@ const mockEmployee = {
 };
 
 const mockResponse = () => {
-  const res: Partial<Response> = { cookie: jest.fn() };
+  const res: Partial<Response> = {
+    cookie: jest.fn(),
+    clearCookie: jest.fn(),
+  };
   return res as Response;
 };
 
@@ -43,11 +46,18 @@ describe('AuthService', () => {
         },
         {
           provide: JwtService,
-          useValue: { sign: jest.fn().mockReturnValue('signed-token') },
+          useValue: {
+            sign: jest.fn().mockReturnValue('signed-token'),
+            decode: jest.fn(),
+          },
         },
         {
           provide: RedisService,
-          useValue: { set: jest.fn() },
+          useValue: {
+            set: jest.fn(),
+            exists: jest.fn(),
+            del: jest.fn(),
+          },
         },
         {
           provide: ConfigService,
@@ -146,6 +156,92 @@ describe('AuthService', () => {
       });
       const result = await service.login('admin@pointsmall.com', 'pass', undefined, mockResponse());
       expect(JSON.stringify(result)).not.toContain('signed-token');
+    });
+  });
+
+  describe('refresh', () => {
+    const fakePayload = { sub: 1, email: 'admin@pointsmall.com', roles: ['admin'] };
+
+    it('AC-01/03: decodes expired token, checks Redis, issues new access_token cookie', async () => {
+      jwtService.decode.mockReturnValue(fakePayload as any);
+      redisService.exists.mockResolvedValue(true);
+      jwtService.sign.mockReturnValue('new-signed-token' as any);
+      const res = mockResponse();
+
+      const result = await service.refresh('expired-token', res);
+
+      expect(jwtService.decode).toHaveBeenCalledWith('expired-token');
+      expect(redisService.exists).toHaveBeenCalledWith('refresh:1');
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        { sub: 1, email: 'admin@pointsmall.com', roles: ['admin'] },
+        expect.objectContaining({ secret: 'test-secret', expiresIn: '15m' }),
+      );
+      expect(res.cookie).toHaveBeenCalledWith(
+        'access_token',
+        'new-signed-token',
+        expect.objectContaining({ httpOnly: true, sameSite: 'strict', path: '/' }),
+      );
+      expect(result).toEqual({ user: { id: 1, email: 'admin@pointsmall.com', roles: ['admin'] } });
+    });
+
+    it('AC-04: Redis key is NOT renewed (exists called, set NOT called)', async () => {
+      jwtService.decode.mockReturnValue(fakePayload as any);
+      redisService.exists.mockResolvedValue(true);
+      jwtService.sign.mockReturnValue('new-signed-token' as any);
+
+      await service.refresh('expired-token', mockResponse());
+
+      expect(redisService.set).not.toHaveBeenCalled();
+    });
+
+    it('AC-05: undefined token throws bff-2003 UnauthorizedException', async () => {
+      await expect(service.refresh(undefined, mockResponse())).rejects.toMatchObject({
+        response: expect.objectContaining({ statusCode: 401 }),
+        bffCode: 'bff-2003',
+      });
+    });
+
+    it('AC-05: null decode result throws bff-2003', async () => {
+      jwtService.decode.mockReturnValue(null as any);
+
+      await expect(service.refresh('bad-token', mockResponse())).rejects.toMatchObject({
+        bffCode: 'bff-2003',
+      });
+    });
+
+    it('AC-05: payload missing sub throws bff-2003', async () => {
+      jwtService.decode.mockReturnValue({ email: 'x@x.com' } as any);
+
+      await expect(service.refresh('no-sub-token', mockResponse())).rejects.toMatchObject({
+        bffCode: 'bff-2003',
+      });
+    });
+
+    it('AC-06: Redis key missing throws bff-2004 UnauthorizedException', async () => {
+      jwtService.decode.mockReturnValue(fakePayload as any);
+      redisService.exists.mockResolvedValue(false);
+
+      await expect(service.refresh('expired-token', mockResponse())).rejects.toMatchObject({
+        bffCode: 'bff-2004',
+      });
+    });
+  });
+
+  describe('logout', () => {
+    it('AC-07: deletes Redis refresh key and clears access_token cookie', async () => {
+      redisService.del.mockResolvedValue();
+      const res = mockResponse();
+
+      await service.logout(1, res);
+
+      expect(redisService.del).toHaveBeenCalledWith('refresh:1');
+      expect(res.clearCookie).toHaveBeenCalledWith('access_token', { path: '/' });
+    });
+
+    it('AC-07: returns void', async () => {
+      redisService.del.mockResolvedValue();
+      const result = await service.logout(42, mockResponse());
+      expect(result).toBeUndefined();
     });
   });
 });
