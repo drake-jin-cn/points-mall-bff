@@ -1,9 +1,11 @@
 import {
-  Body,
   Controller,
+  Body,
   HttpCode,
   HttpStatus,
+  Get,
   Post,
+  Query,
   Req,
   Res,
 } from '@nestjs/common';
@@ -16,6 +18,23 @@ import { ok } from '../common/api-response';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Public()
+  @Get('github')
+  async github(@Res() res: Response) {
+    await this.authService.startGithubLogin(res);
+  }
+
+  @Public()
+  @Get('github/callback')
+  async githubCallback(
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
+    @Query('error') error: string | undefined,
+    @Res() res: Response,
+  ) {
+    await this.authService.handleGithubCallback({ code, state, error }, res);
+  }
 
   @Public()
   @Post('login')

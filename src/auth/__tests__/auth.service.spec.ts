@@ -12,6 +12,7 @@ import {
   CoreConnectorService,
   CoreAuthError,
 } from '../../connectors/core/core-connector.service';
+import { ThirdPartyConnectorService } from '../../connectors/thirdparty/thirdparty-connector.service';
 import { RedisService } from '../../redis/redis.service';
 
 const mockEmployee = {
@@ -26,6 +27,7 @@ const mockResponse = () => {
   const res: Partial<Response> = {
     cookie: jest.fn(),
     clearCookie: jest.fn(),
+    redirect: jest.fn(),
   };
   return res as Response;
 };
@@ -33,6 +35,7 @@ const mockResponse = () => {
 describe('AuthService', () => {
   let service: AuthService;
   let coreConnector: jest.Mocked<CoreConnectorService>;
+  let thirdPartyConnector: jest.Mocked<ThirdPartyConnectorService>;
   let redisService: jest.Mocked<RedisService>;
   let jwtService: jest.Mocked<JwtService>;
 
@@ -42,7 +45,11 @@ describe('AuthService', () => {
         AuthService,
         {
           provide: CoreConnectorService,
-          useValue: { verifyCredentials: jest.fn() },
+          useValue: { verifyCredentials: jest.fn(), findOrCreateByGithub: jest.fn() },
+        },
+        {
+          provide: ThirdPartyConnectorService,
+          useValue: { getGithubAuthUrl: jest.fn(), exchangeGithubCode: jest.fn() },
         },
         {
           provide: JwtService,
@@ -75,6 +82,7 @@ describe('AuthService', () => {
                 JWT_ACCESS_EXPIRES_IN: '15m',
                 JWT_REFRESH_EXPIRES_IN: '7d',
                 NODE_ENV: 'test',
+                FRONTEND_URL: 'http://localhost:3003',
               };
               return map[key] ?? fallback;
             }),
@@ -85,6 +93,7 @@ describe('AuthService', () => {
 
     service = module.get(AuthService);
     coreConnector = module.get(CoreConnectorService);
+    thirdPartyConnector = module.get(ThirdPartyConnectorService);
     redisService = module.get(RedisService);
     jwtService = module.get(JwtService);
   });
@@ -223,6 +232,160 @@ describe('AuthService', () => {
 
       await expect(service.refresh('expired-token', mockResponse())).rejects.toMatchObject({
         bffCode: 'bff-2004',
+      });
+    });
+
+    describe('startGithubLogin', () => {
+      it('AC-04: stores oauth state in Redis and redirects to GitHub URL', async () => {
+        thirdPartyConnector.getGithubAuthUrl.mockResolvedValue({
+          url: 'https://github.com/login/oauth/authorize?state=oauth-state',
+          state: 'oauth-state',
+        });
+        jwtService.sign.mockReturnValue('service-jwt');
+        const res = mockResponse();
+
+        await service.startGithubLogin(res);
+
+        expect(jwtService.sign).toHaveBeenCalledWith(
+          { sub: 'bff-service' },
+          expect.objectContaining({ secret: 'test-secret', expiresIn: '60s' }),
+        );
+        expect(thirdPartyConnector.getGithubAuthUrl).toHaveBeenCalledWith('service-jwt');
+        expect(redisService.set).toHaveBeenCalledWith(
+          'oauth:github:state:oauth-state',
+          '1',
+          300,
+        );
+        expect(res.redirect).toHaveBeenCalledWith(
+          'https://github.com/login/oauth/authorize?state=oauth-state',
+        );
+      });
+    });
+
+    describe('handleGithubCallback', () => {
+      it('AC-07: access_denied redirects to oauth_cancelled before any downstream work', async () => {
+        const res = mockResponse();
+
+        await service.handleGithubCallback(
+          { error: 'access_denied', state: 'oauth-state', code: 'ignored' },
+          res,
+        );
+
+        expect(redisService.exists).not.toHaveBeenCalled();
+        expect(thirdPartyConnector.exchangeGithubCode).not.toHaveBeenCalled();
+        expect(coreConnector.findOrCreateByGithub).not.toHaveBeenCalled();
+        expect(res.redirect).toHaveBeenCalledWith(
+          'http://localhost:3003/login?error=oauth_cancelled',
+        );
+      });
+
+      it('AC-05: invalid oauth state redirects to oauth_state_invalid and stops', async () => {
+        redisService.exists.mockResolvedValue(false);
+        const res = mockResponse();
+
+        await service.handleGithubCallback(
+          { state: 'missing-state', code: 'oauth-code' },
+          res,
+        );
+
+        expect(redisService.exists).toHaveBeenCalledWith(
+          'oauth:github:state:missing-state',
+        );
+        expect(redisService.del).not.toHaveBeenCalled();
+        expect(thirdPartyConnector.exchangeGithubCode).not.toHaveBeenCalled();
+        expect(coreConnector.findOrCreateByGithub).not.toHaveBeenCalled();
+        expect(res.redirect).toHaveBeenCalledWith(
+          'http://localhost:3003/login?error=oauth_state_invalid',
+        );
+      });
+
+      it('AC-08: downstream failures redirect to oauth_failed after consuming state', async () => {
+        redisService.exists.mockResolvedValue(true);
+        thirdPartyConnector.exchangeGithubCode.mockRejectedValue(new Error('timeout'));
+        jwtService.sign.mockReturnValue('service-jwt');
+        const res = mockResponse();
+
+        await service.handleGithubCallback(
+          { state: 'oauth-state', code: 'oauth-code' },
+          res,
+        );
+
+        expect(redisService.del).toHaveBeenCalledWith('oauth:github:state:oauth-state');
+        expect(coreConnector.findOrCreateByGithub).not.toHaveBeenCalled();
+        expect(res.cookie).not.toHaveBeenCalled();
+        expect(res.redirect).toHaveBeenCalledWith(
+          'http://localhost:3003/login?error=oauth_failed',
+        );
+      });
+
+      it('AC-06/16: successful GitHub callback issues same JWT claim shapes as password login and redirects', async () => {
+        const employeeWithGithub = {
+          ...mockEmployee,
+          githubId: '123',
+          avatarUrl: 'https://avatar.example.com/octo.png',
+        };
+        coreConnector.verifyCredentials.mockResolvedValue({
+          employee: mockEmployee,
+          traceId: 'trace-login',
+        });
+        const loginRes = mockResponse();
+        jwtService.sign
+          .mockReturnValueOnce('login-access-token')
+          .mockReturnValueOnce('login-refresh-token');
+
+        await service.login('admin@pointsmall.com', 'pass', undefined, loginRes);
+
+        const loginAccessCall = (jwtService.sign as jest.Mock).mock.calls[0];
+        const loginRefreshCall = (jwtService.sign as jest.Mock).mock.calls[1];
+
+        (jwtService.sign as jest.Mock).mockClear();
+        redisService.set.mockClear();
+        redisService.exists.mockResolvedValue(true);
+        thirdPartyConnector.exchangeGithubCode.mockResolvedValue({
+          githubId: '123',
+          email: 'admin@pointsmall.com',
+          name: 'Admin',
+          avatar: 'https://avatar.example.com/octo.png',
+        });
+        coreConnector.findOrCreateByGithub.mockResolvedValue(employeeWithGithub);
+        jwtService.sign
+          .mockReturnValueOnce('service-jwt')
+          .mockReturnValueOnce('oauth-access-token')
+          .mockReturnValueOnce('oauth-refresh-token');
+        const res = mockResponse();
+
+        await service.handleGithubCallback(
+          { state: 'oauth-state', code: 'oauth-code' },
+          res,
+        );
+
+        expect(redisService.del).toHaveBeenCalledWith('oauth:github:state:oauth-state');
+        expect(coreConnector.findOrCreateByGithub).toHaveBeenCalledWith({
+          githubId: '123',
+          email: 'admin@pointsmall.com',
+          name: 'Admin',
+          avatarUrl: 'https://avatar.example.com/octo.png',
+        });
+        expect((jwtService.sign as jest.Mock).mock.calls[1]).toEqual(loginAccessCall);
+        expect((jwtService.sign as jest.Mock).mock.calls[2]).toEqual(loginRefreshCall);
+        expect(redisService.set).toHaveBeenCalledWith(
+          'refresh:1',
+          'oauth-refresh-token',
+          7 * 24 * 60 * 60,
+        );
+        expect(res.cookie).toHaveBeenCalledWith(
+          'access_token',
+          'oauth-access-token',
+          expect.objectContaining({
+            httpOnly: true,
+            sameSite: 'strict',
+            maxAge: 15 * 60 * 1000,
+            path: '/',
+          }),
+        );
+        expect(res.redirect).toHaveBeenCalledWith(
+          'http://localhost:3003/auth/github/callback',
+        );
       });
     });
   });

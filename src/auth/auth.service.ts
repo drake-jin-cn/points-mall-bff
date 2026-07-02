@@ -13,6 +13,7 @@ import {
   CoreConnectorService,
   EmployeeInfo,
 } from '../connectors/core/core-connector.service';
+import { ThirdPartyConnectorService } from '../connectors/thirdparty/thirdparty-connector.service';
 import { RedisService } from '../redis/redis.service';
 
 const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
@@ -28,6 +29,7 @@ export class AuthService {
 
   constructor(
     private readonly coreConnector: CoreConnectorService,
+    private readonly thirdPartyConnector: ThirdPartyConnectorService,
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService,
     private readonly config: ConfigService,
@@ -57,6 +59,89 @@ export class AuthService {
       throw new ServiceUnavailableException('Authentication service unavailable');
     }
 
+    await this.issueEmployeeSession(employee, res);
+
+    this.logger.log(
+      `Login success employeeId=${employee.id} traceId=${traceId}`,
+    );
+
+    return {
+      user: {
+        id: employee.id,
+        name: employee.name,
+        email: employee.email,
+        roles: employee.roles,
+      },
+    };
+  }
+
+  async startGithubLogin(res: Response): Promise<void> {
+    const serviceJwt = this.signServiceJwt();
+    const { url, state } = await this.thirdPartyConnector.getGithubAuthUrl(serviceJwt);
+
+    await this.redisService.set(`oauth:github:state:${state}`, '1', 300);
+    res.redirect(url);
+  }
+
+  async handleGithubCallback(
+    query: { code?: string; state?: string; error?: string },
+    res: Response,
+  ): Promise<void> {
+    const frontendUrl = this.config.get<string>(
+      'FRONTEND_URL',
+      'http://localhost:3003',
+    );
+
+    if (query.error === 'access_denied') {
+      res.redirect(`${frontendUrl}/login?error=oauth_cancelled`);
+      return;
+    }
+
+    const stateKey = `oauth:github:state:${query.state ?? ''}`;
+    const hasState = query.state
+      ? await this.redisService.exists(stateKey)
+      : false;
+
+    if (!hasState) {
+      res.redirect(`${frontendUrl}/login?error=oauth_state_invalid`);
+      return;
+    }
+
+    await this.redisService.del(stateKey);
+
+    try {
+      const serviceJwt = this.signServiceJwt();
+      const profile = await this.thirdPartyConnector.exchangeGithubCode(
+        query.code ?? '',
+        serviceJwt,
+      );
+      const employee = await this.coreConnector.findOrCreateByGithub({
+        githubId: profile.githubId,
+        email: profile.email,
+        name: profile.name,
+        avatarUrl: profile.avatar,
+      });
+
+      await this.issueEmployeeSession(employee, res);
+      res.redirect(`${frontendUrl}/auth/github/callback`);
+    } catch (error) {
+      this.logger.warn(`GitHub OAuth callback failed: ${(error as Error).message}`);
+      res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+    }
+  }
+
+  private signServiceJwt(): string {
+    const jwtSecret = this.config.getOrThrow<string>('JWT_SECRET');
+    return this.jwtService.sign(
+      { sub: 'bff-service' },
+      { secret: jwtSecret, expiresIn: '60s' },
+    );
+  }
+
+  private async issueEmployeeSession(
+    employee: EmployeeInfo,
+    res: Response,
+  ): Promise<void> {
     const jwtSecret = this.config.getOrThrow<string>('JWT_SECRET');
     const jwtRefreshSecret = this.config.getOrThrow<string>('JWT_REFRESH_SECRET');
     const accessExpiresIn = this.config.get<string>('JWT_ACCESS_EXPIRES_IN', '15m');
@@ -86,19 +171,6 @@ export class AuthService {
       maxAge: ACCESS_COOKIE_MAX_AGE_MS,
       path: '/',
     });
-
-    this.logger.log(
-      `Login success employeeId=${employee.id} traceId=${traceId}`,
-    );
-
-    return {
-      user: {
-        id: employee.id,
-        name: employee.name,
-        email: employee.email,
-        roles: employee.roles,
-      },
-    };
   }
 
   private mapCoreError(error: CoreAuthError): never {

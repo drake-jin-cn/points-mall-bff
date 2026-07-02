@@ -10,6 +10,8 @@ export interface EmployeeInfo {
   id: number;
   name: string;
   email: string;
+  githubId?: string;
+  avatarUrl?: string | null;
   isActive: boolean;
   roles: string[];
 }
@@ -65,6 +67,38 @@ export class CoreConnectorService {
       const code: string = error?.response?.data?.code ?? 'core-9999';
       this.logger.warn(
         `verifyCredentials failed status=${status} code=${code} traceId=${traceId}`,
+      );
+      throw new CoreAuthError(code, status, traceId);
+    }
+  }
+
+  async findOrCreateByGithub(profile: {
+    githubId: string;
+    email: string;
+    name: string;
+    avatarUrl: string | null;
+  }): Promise<EmployeeInfo> {
+    const apiKey = this.config.getOrThrow<string>('INTERNAL_API_KEY');
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post<{ code: string; data: EmployeeInfo }>(
+          '/internal/employees/find-or-create-by-github',
+          profile,
+          {
+            headers: {
+              INTERNAL_API_KEY: apiKey,
+            },
+          },
+        ),
+      );
+      return response.data.data;
+    } catch (error: any) {
+      const status: number = error?.response?.status ?? 503;
+      const code: string = error?.response?.data?.code ?? 'core-9999';
+      const traceId = crypto.randomUUID();
+      this.logger.warn(
+        `findOrCreateByGithub failed status=${status} code=${code} traceId=${traceId}`,
       );
       throw new CoreAuthError(code, status, traceId);
     }

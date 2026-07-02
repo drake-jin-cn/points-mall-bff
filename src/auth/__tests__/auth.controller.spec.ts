@@ -12,13 +12,20 @@ import { GlobalExceptionFilter } from '../../common/global-exception.filter';
 
 describe('AuthController (integration)', () => {
   let app: INestApplication;
-  let authService: jest.Mocked<Pick<AuthService, 'login' | 'refresh' | 'logout'>>;
+  let authService: jest.Mocked<
+    Pick<
+      AuthService,
+      'login' | 'refresh' | 'logout' | 'startGithubLogin' | 'handleGithubCallback'
+    >
+  >;
 
   beforeAll(async () => {
     const mockAuthService = {
       login: jest.fn(),
       refresh: jest.fn(),
       logout: jest.fn(),
+      startGithubLogin: jest.fn(),
+      handleGithubCallback: jest.fn(),
     };
     const mockJwtService = { verify: jest.fn() };
     const mockConfigService = {
@@ -182,6 +189,41 @@ describe('AuthController (integration)', () => {
       const res = await request(app.getHttpServer()).post('/auth/logout');
 
       expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /auth/github', () => {
+    it('is public and returns 302 redirect', async () => {
+      (authService.startGithubLogin as jest.Mock).mockImplementation((res) => {
+        res.redirect('https://github.com/login/oauth/authorize?state=oauth-state');
+      });
+
+      const res = await request(app.getHttpServer()).get('/auth/github');
+
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe(
+        'https://github.com/login/oauth/authorize?state=oauth-state',
+      );
+      expect(authService.startGithubLogin).toHaveBeenCalledWith(expect.anything());
+    });
+  });
+
+  describe('GET /auth/github/callback', () => {
+    it('is public and redirects to frontend callback on success', async () => {
+      (authService.handleGithubCallback as jest.Mock).mockImplementation((query, res) => {
+        res.redirect('http://localhost:3003/auth/github/callback');
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/auth/github/callback')
+        .query({ code: 'oauth-code', state: 'oauth-state' });
+
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe('http://localhost:3003/auth/github/callback');
+      expect(authService.handleGithubCallback).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'oauth-code', state: 'oauth-state' }),
+        expect.anything(),
+      );
     });
   });
 });
