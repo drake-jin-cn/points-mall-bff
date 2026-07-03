@@ -76,11 +76,19 @@ export class AuthService {
   }
 
   async startGithubLogin(res: Response): Promise<void> {
-    const serviceJwt = this.signServiceJwt();
-    const { url, state } = await this.thirdPartyConnector.getGithubAuthUrl(serviceJwt);
-
-    await this.redisService.set(`oauth:github:state:${state}`, '1', 300);
-    res.redirect(url);
+    const frontendUrl = this.config.get<string>(
+      'FRONTEND_URL',
+      'http://localhost:3003',
+    );
+    try {
+      const serviceJwt = this.signServiceJwt();
+      const { url, state } = await this.thirdPartyConnector.getGithubAuthUrl(serviceJwt);
+      await this.redisService.set(`oauth:github:state:${state}`, '1', 300);
+      res.redirect(url);
+    } catch (error) {
+      this.logger.warn(`GitHub OAuth start failed: ${(error as Error).message}`);
+      res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+    }
   }
 
   async handleGithubCallback(
@@ -98,16 +106,27 @@ export class AuthService {
     }
 
     const stateKey = `oauth:github:state:${query.state ?? ''}`;
-    const hasState = query.state
-      ? await this.redisService.exists(stateKey)
-      : false;
+    let hasState: boolean;
+    try {
+      hasState = query.state
+        ? await this.redisService.exists(stateKey)
+        : false;
+    } catch (error) {
+      this.logger.warn(`Redis error checking OAuth state: ${(error as Error).message}`);
+      res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+      return;
+    }
 
     if (!hasState) {
       res.redirect(`${frontendUrl}/login?error=oauth_state_invalid`);
       return;
     }
 
-    await this.redisService.del(stateKey);
+    try {
+      await this.redisService.del(stateKey);
+    } catch (error) {
+      this.logger.warn(`Redis error deleting OAuth state: ${(error as Error).message}`);
+    }
 
     try {
       const serviceJwt = this.signServiceJwt();
