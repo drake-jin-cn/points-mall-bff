@@ -12,7 +12,7 @@ import { ThirdPartyConnectorService } from './thirdparty-connector.service';
           'THIRDPARTY_SERVICE_URL',
           'http://localhost:8084',
         ),
-        timeout: 5000,
+        timeout: 15000,
       }),
       inject: [ConfigService],
     }),
