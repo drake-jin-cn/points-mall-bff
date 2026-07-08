@@ -17,7 +17,7 @@ const mockEmployee = {
   name: 'Admin',
   email: 'admin@pointsmall.com',
   isActive: true,
-  roles: ['admin'],
+  roles: ['ADMIN'],
 };
 
 const mockResponse = () => {
@@ -114,7 +114,7 @@ describe('AuthService', () => {
         id: 1,
         name: 'Admin',
         email: 'admin@pointsmall.com',
-        roles: ['admin'],
+        roles: ['ADMIN'],
       });
       // AC-06: cookie set as HttpOnly
       expect(res.cookie).toHaveBeenCalledWith(
@@ -124,7 +124,7 @@ describe('AuthService', () => {
       );
       // AC-07: access_token signed with correct payload
       expect(jwtService.sign).toHaveBeenCalledWith(
-        { sub: 1, email: 'admin@pointsmall.com', roles: ['admin'] },
+        { sub: 1, email: 'admin@pointsmall.com', roles: ['ADMIN'] },
         expect.objectContaining({ secret: 'test-secret', expiresIn: '15m' }),
       );
       // AC-08: refresh token stored in redis
@@ -167,7 +167,7 @@ describe('AuthService', () => {
   });
 
   describe('refresh', () => {
-    const fakePayload = { sub: 1, email: 'admin@pointsmall.com', roles: ['admin'] };
+    const fakePayload = { sub: 1, email: 'admin@pointsmall.com', roles: ['ADMIN'] };
 
     it('AC-01/03: decodes expired token, checks Redis, issues new access_token cookie', async () => {
       jwtService.decode.mockReturnValue(fakePayload as any);
@@ -180,7 +180,7 @@ describe('AuthService', () => {
       expect(jwtService.decode).toHaveBeenCalledWith('expired-token');
       expect(redisService.exists).toHaveBeenCalledWith('refresh:1');
       expect(jwtService.sign).toHaveBeenCalledWith(
-        { sub: 1, email: 'admin@pointsmall.com', roles: ['admin'] },
+        { sub: 1, email: 'admin@pointsmall.com', roles: ['ADMIN'] },
         expect.objectContaining({ secret: 'test-secret', expiresIn: '15m' }),
       );
       expect(res.cookie).toHaveBeenCalledWith(
@@ -188,7 +188,7 @@ describe('AuthService', () => {
         'new-signed-token',
         expect.objectContaining({ httpOnly: true, sameSite: 'strict', path: '/' }),
       );
-      expect(result).toEqual({ user: { id: 1, email: 'admin@pointsmall.com', roles: ['admin'] } });
+      expect(result).toEqual({ user: { id: 1, email: 'admin@pointsmall.com', roles: ['ADMIN'] } });
     });
 
     it('AC-04: Redis key is NOT renewed (exists called, set NOT called)', async () => {

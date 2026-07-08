@@ -72,7 +72,7 @@ describe('AuthController (integration)', () => {
 
   it('AC-05/06: POST /auth/login success returns user and sets cookie', async () => {
     (authService.login as jest.Mock).mockResolvedValue({
-      user: { id: 1, name: 'Admin', email: 'admin@pointsmall.com', roles: ['admin'] },
+      user: { id: 1, name: 'Admin', email: 'admin@pointsmall.com', roles: ['ADMIN'] },
     });
     const res = await request(app.getHttpServer())
       .post('/auth/login')
@@ -104,7 +104,7 @@ describe('AuthController (integration)', () => {
     // Guard behavior for non-public routes is fully tested in jwt-auth.guard.spec.ts
     // Here we verify the public decorator works: /auth/login is accessible without a cookie
     (authService.login as jest.Mock).mockResolvedValue({
-      user: { id: 1, name: 'Admin', email: 'admin@pointsmall.com', roles: ['admin'] },
+      user: { id: 1, name: 'Admin', email: 'admin@pointsmall.com', roles: ['ADMIN'] },
     });
     const res = await request(app.getHttpServer())
       .post('/auth/login')
@@ -115,7 +115,7 @@ describe('AuthController (integration)', () => {
   describe('POST /auth/refresh', () => {
     it('AC-01: success returns 200 with user info', async () => {
       (authService.refresh as jest.Mock).mockResolvedValue({
-        user: { id: 1, email: 'admin@pointsmall.com', roles: ['admin'] },
+        user: { id: 1, email: 'admin@pointsmall.com', roles: ['ADMIN'] },
       });
 
       const res = await request(app.getHttpServer())
@@ -156,7 +156,7 @@ describe('AuthController (integration)', () => {
 
     it('AC-10: /auth/refresh accessible without access_token cookie (@Public)', async () => {
       (authService.refresh as jest.Mock).mockResolvedValue({
-        user: { id: 1, email: 'admin@pointsmall.com', roles: ['admin'] },
+        user: { id: 1, email: 'admin@pointsmall.com', roles: ['ADMIN'] },
       });
 
       const res = await request(app.getHttpServer()).post('/auth/refresh');
@@ -169,7 +169,7 @@ describe('AuthController (integration)', () => {
     it('AC-07: valid token → 200, service.logout called with userId', async () => {
       (authService.logout as jest.Mock).mockResolvedValue(undefined);
       const mockJwt = app.get(JwtService);
-      (mockJwt.verify as jest.Mock).mockReturnValue({ sub: 1, email: 'a@b.com', roles: ['admin'] });
+      (mockJwt.verify as jest.Mock).mockReturnValue({ sub: 1, email: 'a@b.com', roles: ['ADMIN'] });
 
       const res = await request(app.getHttpServer())
         .post('/auth/logout')

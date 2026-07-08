@@ -46,7 +46,7 @@ describe('CoreConnectorService', () => {
             githubId: '123',
             avatarUrl: 'https://avatar.example.com/octo.png',
             isActive: true,
-            roles: ['employee'],
+            roles: ['EMPLOYEE'],
           },
         },
       } as any),
@@ -80,7 +80,7 @@ describe('CoreConnectorService', () => {
       githubId: '123',
       avatarUrl: 'https://avatar.example.com/octo.png',
       isActive: true,
-      roles: ['employee'],
+      roles: ['EMPLOYEE'],
     });
   });
 

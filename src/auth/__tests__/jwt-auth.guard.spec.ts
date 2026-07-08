@@ -59,7 +59,7 @@ describe('JwtAuthGuard', () => {
 
   it('AC-14 valid token: attaches payload and returns true', () => {
     reflector.getAllAndOverride.mockReturnValue(false);
-    const payload = { sub: 1, email: 'a@b.com', roles: ['admin'] };
+    const payload = { sub: 1, email: 'a@b.com', roles: ['ADMIN'] };
     jwtService.verify.mockReturnValue(payload as any);
     const req: any = { cookies: { access_token: 'valid.token' } };
     const ctx = {
