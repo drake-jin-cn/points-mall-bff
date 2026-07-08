@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+# commit-msg hook — enforces the project commit message format.
+#
+# Format: <type>(<scope>): <summary>
+#
+#   type  = feat | fix | chore | test | docs | refactor | ci | perf | revert
+#   scope = TASK-ID (e.g. TASK-INFRA-0001) or a service name
+#
+# Examples:
+#   feat(TASK-AUTH-0001): implement JWT login endpoint
+#   chore(TASK-INFRA-0002): add pnpm workspace config
+#   fix(bff): correct token expiry header
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Allow merge commits, revert commits, and fixup/squash
+case "$COMMIT_MSG" in
+  Merge\ *|Revert\ *|fixup\!*|squash\!*)
+    exit 0
+    ;;
+esac
+
+# Pattern: <type>(<scope>): <summary>
+PATTERN="^(feat|fix|chore|test|docs|refactor|ci|perf|revert)\([^)]+\): .+"
+
+if ! echo "$COMMIT_MSG" | grep -qE "$PATTERN"; then
+  echo ""
+  echo "✗ Commit message format error"
+  echo ""
+  echo "  Required format:  <type>(<scope>): <summary>"
+  echo "  Allowed types:    feat | fix | chore | test | docs | refactor | ci | perf | revert"
+  echo "  Scope examples:   TASK-INFRA-0001 | bff | core | shop"
+  echo ""
+  echo "  Your message:     $COMMIT_MSG"
+  echo ""
+  echo "  Valid examples:"
+  echo "    feat(TASK-AUTH-0001): implement JWT login"
+  echo "    chore(TASK-INFRA-0002): add pnpm workspace"
+  echo "    fix(bff): correct token expiry handling"
+  echo ""
+  exit 1
+fi
+
+exit 0
