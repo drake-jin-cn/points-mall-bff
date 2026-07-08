@@ -27,10 +27,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       bffCode = ext.bffCode ?? this.statusToCode(status);
       traceId = ext.traceId ?? traceId;
       const body = exception.getResponse();
-      message =
-        typeof body === 'string'
-          ? body
-          : (body as any).message ?? message;
+      message = typeof body === 'string' ? body : ((body as any).message ?? message);
     } else {
       this.logger.error('Unhandled exception', exception);
     }

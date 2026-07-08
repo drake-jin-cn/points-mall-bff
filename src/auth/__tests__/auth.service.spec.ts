@@ -8,10 +8,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from '../auth.service';
-import {
-  CoreConnectorService,
-  CoreAuthError,
-} from '../../connectors/core/core-connector.service';
+import { CoreConnectorService, CoreAuthError } from '../../connectors/core/core-connector.service';
 import { ThirdPartyConnectorService } from '../../connectors/thirdparty/thirdparty-connector.service';
 import { RedisService } from '../../redis/redis.service';
 
@@ -75,7 +72,12 @@ describe('AuthService', () => {
                 JWT_REFRESH_SECRET: 'test-refresh-secret',
                 INTERNAL_API_KEY: 'test-key',
               };
-              return map[key] ?? (() => { throw new Error(`Missing ${key}`); })();
+              return (
+                map[key] ??
+                (() => {
+                  throw new Error(`Missing ${key}`);
+                })()
+              );
             }),
             get: jest.fn((key: string, fallback?: string) => {
               const map: Record<string, string> = {
@@ -126,11 +128,7 @@ describe('AuthService', () => {
         expect.objectContaining({ secret: 'test-secret', expiresIn: '15m' }),
       );
       // AC-08: refresh token stored in redis
-      expect(redisService.set).toHaveBeenCalledWith(
-        'refresh:1',
-        'signed-token',
-        7 * 24 * 60 * 60,
-      );
+      expect(redisService.set).toHaveBeenCalledWith('refresh:1', 'signed-token', 7 * 24 * 60 * 60);
     });
 
     it('AC-09: maps core-1001 to bff-2001 UnauthorizedException', async () => {
@@ -153,9 +151,9 @@ describe('AuthService', () => {
 
     it('AC-11: maps unreachable core to ServiceUnavailableException', async () => {
       coreConnector.verifyCredentials.mockRejectedValue(new Error('ECONNREFUSED'));
-      await expect(
-        service.login('a@b.com', 'pass', undefined, mockResponse()),
-      ).rejects.toThrow(ServiceUnavailableException);
+      await expect(service.login('a@b.com', 'pass', undefined, mockResponse())).rejects.toThrow(
+        ServiceUnavailableException,
+      );
     });
 
     it('AC-21: access_token is never in the return value', async () => {
@@ -251,11 +249,7 @@ describe('AuthService', () => {
           expect.objectContaining({ secret: 'test-secret', expiresIn: '60s' }),
         );
         expect(thirdPartyConnector.getGithubAuthUrl).toHaveBeenCalledWith('service-jwt');
-        expect(redisService.set).toHaveBeenCalledWith(
-          'oauth:github:state:oauth-state',
-          '1',
-          300,
-        );
+        expect(redisService.set).toHaveBeenCalledWith('oauth:github:state:oauth-state', '1', 300);
         expect(res.redirect).toHaveBeenCalledWith(
           'https://github.com/login/oauth/authorize?state=oauth-state',
         );
@@ -283,14 +277,9 @@ describe('AuthService', () => {
         redisService.exists.mockResolvedValue(false);
         const res = mockResponse();
 
-        await service.handleGithubCallback(
-          { state: 'missing-state', code: 'oauth-code' },
-          res,
-        );
+        await service.handleGithubCallback({ state: 'missing-state', code: 'oauth-code' }, res);
 
-        expect(redisService.exists).toHaveBeenCalledWith(
-          'oauth:github:state:missing-state',
-        );
+        expect(redisService.exists).toHaveBeenCalledWith('oauth:github:state:missing-state');
         expect(redisService.del).not.toHaveBeenCalled();
         expect(thirdPartyConnector.exchangeGithubCode).not.toHaveBeenCalled();
         expect(coreConnector.findOrCreateByGithub).not.toHaveBeenCalled();
@@ -305,17 +294,12 @@ describe('AuthService', () => {
         jwtService.sign.mockReturnValue('service-jwt');
         const res = mockResponse();
 
-        await service.handleGithubCallback(
-          { state: 'oauth-state', code: 'oauth-code' },
-          res,
-        );
+        await service.handleGithubCallback({ state: 'oauth-state', code: 'oauth-code' }, res);
 
         expect(redisService.del).toHaveBeenCalledWith('oauth:github:state:oauth-state');
         expect(coreConnector.findOrCreateByGithub).not.toHaveBeenCalled();
         expect(res.cookie).not.toHaveBeenCalled();
-        expect(res.redirect).toHaveBeenCalledWith(
-          'http://localhost:3003/login?error=oauth_failed',
-        );
+        expect(res.redirect).toHaveBeenCalledWith('http://localhost:3003/login?error=oauth_failed');
       });
 
       it('AC-06/16: successful GitHub callback issues same JWT claim shapes as password login and redirects', async () => {
@@ -354,10 +338,7 @@ describe('AuthService', () => {
           .mockReturnValueOnce('oauth-refresh-token');
         const res = mockResponse();
 
-        await service.handleGithubCallback(
-          { state: 'oauth-state', code: 'oauth-code' },
-          res,
-        );
+        await service.handleGithubCallback({ state: 'oauth-state', code: 'oauth-code' }, res);
 
         expect(redisService.del).toHaveBeenCalledWith('oauth:github:state:oauth-state');
         expect(coreConnector.findOrCreateByGithub).toHaveBeenCalledWith({
@@ -383,9 +364,7 @@ describe('AuthService', () => {
             path: '/',
           }),
         );
-        expect(res.redirect).toHaveBeenCalledWith(
-          'http://localhost:3003/auth/github/callback',
-        );
+        expect(res.redirect).toHaveBeenCalledWith('http://localhost:3003/auth/github/callback');
       });
     });
   });

@@ -49,7 +49,9 @@ describe('JwtAuthGuard', () => {
 
   it('AC-15: expired/invalid token throws UnauthorizedException', () => {
     reflector.getAllAndOverride.mockReturnValue(false);
-    jwtService.verify.mockImplementation(() => { throw new Error('jwt expired'); });
+    jwtService.verify.mockImplementation(() => {
+      throw new Error('jwt expired');
+    });
     expect(() => guard.canActivate(makeContext({ access_token: 'bad.token' }))).toThrow(
       UnauthorizedException,
     );

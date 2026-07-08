@@ -2,10 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { of, throwError } from 'rxjs';
-import {
-  CoreAuthError,
-  CoreConnectorService,
-} from '../core-connector.service';
+import { CoreAuthError, CoreConnectorService } from '../core-connector.service';
 
 describe('CoreConnectorService', () => {
   let service: CoreConnectorService;

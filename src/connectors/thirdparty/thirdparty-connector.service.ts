@@ -15,7 +15,10 @@ export interface GithubProfileResult {
 }
 
 export class ThirdPartyConnectorError extends Error {
-  constructor(public readonly httpStatus: number, message: string) {
+  constructor(
+    public readonly httpStatus: number,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -44,10 +47,7 @@ export class ThirdPartyConnectorService {
     }
   }
 
-  async exchangeGithubCode(
-    code: string,
-    serviceJwt: string,
-  ): Promise<GithubProfileResult> {
+  async exchangeGithubCode(code: string, serviceJwt: string): Promise<GithubProfileResult> {
     try {
       const response = await firstValueFrom(
         this.httpService.get<GithubProfileResult>('/oauth/github/callback', {

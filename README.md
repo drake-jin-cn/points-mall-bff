@@ -21,16 +21,16 @@ TypeScript is non-negotiable at the BFF layer because the BFF is the contract bo
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Framework | NestJS 11, TypeScript 5.8 |
-| Auth | Passport.js, `@nestjs/jwt`, bcrypt |
-| Validation | class-validator, class-transformer, Zod (shared schema with frontend) |
-| Cache | ioredis + Redis |
-| Message Queue | amqplib (RabbitMQ producer) |
-| HTTP Client | Axios (calls to downstream services) |
-| Docs | `@nestjs/swagger` — auto-generated OpenAPI spec |
-| Logging | Winston with structured JSON logs |
+| Layer         | Technology                                                            |
+| ------------- | --------------------------------------------------------------------- |
+| Framework     | NestJS 11, TypeScript 5.8                                             |
+| Auth          | Passport.js, `@nestjs/jwt`, bcrypt                                    |
+| Validation    | class-validator, class-transformer, Zod (shared schema with frontend) |
+| Cache         | ioredis + Redis                                                       |
+| Message Queue | amqplib (RabbitMQ producer)                                           |
+| HTTP Client   | Axios (calls to downstream services)                                  |
+| Docs          | `@nestjs/swagger` — auto-generated OpenAPI spec                       |
+| Logging       | Winston with structured JSON logs                                     |
 
 ## Docker
 

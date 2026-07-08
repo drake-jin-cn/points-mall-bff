@@ -13,10 +13,7 @@ import { GlobalExceptionFilter } from '../../common/global-exception.filter';
 describe('AuthController (integration)', () => {
   let app: INestApplication;
   let authService: jest.Mocked<
-    Pick<
-      AuthService,
-      'login' | 'refresh' | 'logout' | 'startGithubLogin' | 'handleGithubCallback'
-    >
+    Pick<AuthService, 'login' | 'refresh' | 'logout' | 'startGithubLogin' | 'handleGithubCallback'>
   >;
 
   beforeAll(async () => {
@@ -62,9 +59,7 @@ describe('AuthController (integration)', () => {
   });
 
   it('AC-12: POST /auth/login missing fields returns 400', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({});
+    const res = await request(app.getHttpServer()).post('/auth/login').send({});
     expect(res.status).toBe(400);
   });
 
@@ -133,10 +128,10 @@ describe('AuthController (integration)', () => {
     });
 
     it('AC-05: service throws bff-2003 → 401 with code bff-2003', async () => {
-      const err = Object.assign(
-        new UnauthorizedException('Invalid token'),
-        { bffCode: 'bff-2003', traceId: 'trace-abc' },
-      );
+      const err = Object.assign(new UnauthorizedException('Invalid token'), {
+        bffCode: 'bff-2003',
+        traceId: 'trace-abc',
+      });
       (authService.refresh as jest.Mock).mockRejectedValue(err);
 
       const res = await request(app.getHttpServer()).post('/auth/refresh');
@@ -147,10 +142,10 @@ describe('AuthController (integration)', () => {
     });
 
     it('AC-06: service throws bff-2004 → 401 with code bff-2004', async () => {
-      const err = Object.assign(
-        new UnauthorizedException('Session expired, please login again'),
-        { bffCode: 'bff-2004', traceId: 'trace-def' },
-      );
+      const err = Object.assign(new UnauthorizedException('Session expired, please login again'), {
+        bffCode: 'bff-2004',
+        traceId: 'trace-def',
+      });
       (authService.refresh as jest.Mock).mockRejectedValue(err);
 
       const res = await request(app.getHttpServer()).post('/auth/refresh');

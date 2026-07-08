@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
@@ -65,9 +62,7 @@ export class CoreConnectorService {
     } catch (error: any) {
       const status: number = error?.response?.status ?? 503;
       const code: string = error?.response?.data?.code ?? 'core-9999';
-      this.logger.warn(
-        `verifyCredentials failed status=${status} code=${code} traceId=${traceId}`,
-      );
+      this.logger.warn(`verifyCredentials failed status=${status} code=${code} traceId=${traceId}`);
       throw new CoreAuthError(code, status, traceId);
     }
   }

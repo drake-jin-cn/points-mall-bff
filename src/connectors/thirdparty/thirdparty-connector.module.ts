@@ -8,10 +8,7 @@ import { ThirdPartyConnectorService } from './thirdparty-connector.service';
     HttpModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
-        baseURL: config.get<string>(
-          'THIRDPARTY_SERVICE_URL',
-          'http://localhost:8084',
-        ),
+        baseURL: config.get<string>('THIRDPARTY_SERVICE_URL', 'http://localhost:8084'),
         timeout: 15000,
       }),
       inject: [ConfigService],

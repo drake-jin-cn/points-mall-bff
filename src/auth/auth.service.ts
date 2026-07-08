@@ -45,11 +45,7 @@ export class AuthService {
     let traceId: string;
 
     try {
-      const result = await this.coreConnector.verifyCredentials(
-        email,
-        password,
-        inboundTraceId,
-      );
+      const result = await this.coreConnector.verifyCredentials(email, password, inboundTraceId);
       employee = result.employee;
       traceId = result.traceId;
     } catch (error) {
@@ -61,9 +57,7 @@ export class AuthService {
 
     await this.issueEmployeeSession(employee, res);
 
-    this.logger.log(
-      `Login success employeeId=${employee.id} traceId=${traceId}`,
-    );
+    this.logger.log(`Login success employeeId=${employee.id} traceId=${traceId}`);
 
     return {
       user: {
@@ -76,10 +70,7 @@ export class AuthService {
   }
 
   async startGithubLogin(res: Response): Promise<void> {
-    const frontendUrl = this.config.get<string>(
-      'FRONTEND_URL',
-      'http://localhost:3003',
-    );
+    const frontendUrl = this.config.get<string>('FRONTEND_URL', 'http://localhost:3003');
     try {
       const serviceJwt = this.signServiceJwt();
       const { url, state } = await this.thirdPartyConnector.getGithubAuthUrl(serviceJwt);
@@ -95,10 +86,7 @@ export class AuthService {
     query: { code?: string; state?: string; error?: string },
     res: Response,
   ): Promise<void> {
-    const frontendUrl = this.config.get<string>(
-      'FRONTEND_URL',
-      'http://localhost:3003',
-    );
+    const frontendUrl = this.config.get<string>('FRONTEND_URL', 'http://localhost:3003');
 
     if (query.error === 'access_denied') {
       res.redirect(`${frontendUrl}/login?error=oauth_cancelled`);
@@ -108,9 +96,7 @@ export class AuthService {
     const stateKey = `oauth:github:state:${query.state ?? ''}`;
     let hasState: boolean;
     try {
-      hasState = query.state
-        ? await this.redisService.exists(stateKey)
-        : false;
+      hasState = query.state ? await this.redisService.exists(stateKey) : false;
     } catch (error) {
       this.logger.warn(`Redis error checking OAuth state: ${(error as Error).message}`);
       res.redirect(`${frontendUrl}/login?error=oauth_failed`);
@@ -151,16 +137,10 @@ export class AuthService {
 
   private signServiceJwt(): string {
     const jwtSecret = this.config.getOrThrow<string>('JWT_SECRET');
-    return this.jwtService.sign(
-      { sub: 'bff-service' },
-      { secret: jwtSecret, expiresIn: '60s' },
-    );
+    return this.jwtService.sign({ sub: 'bff-service' }, { secret: jwtSecret, expiresIn: '60s' });
   }
 
-  private async issueEmployeeSession(
-    employee: EmployeeInfo,
-    res: Response,
-  ): Promise<void> {
+  private async issueEmployeeSession(employee: EmployeeInfo, res: Response): Promise<void> {
     const jwtSecret = this.config.getOrThrow<string>('JWT_SECRET');
     const jwtRefreshSecret = this.config.getOrThrow<string>('JWT_REFRESH_SECRET');
     const accessExpiresIn = this.config.get<string>('JWT_ACCESS_EXPIRES_IN', '15m');
@@ -176,11 +156,7 @@ export class AuthService {
       { secret: jwtRefreshSecret, expiresIn: refreshExpiresIn as any },
     );
 
-    await this.redisService.set(
-      `refresh:${employee.id}`,
-      refreshToken,
-      REFRESH_TOKEN_TTL_SECONDS,
-    );
+    await this.redisService.set(`refresh:${employee.id}`, refreshToken, REFRESH_TOKEN_TTL_SECONDS);
 
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
     res.cookie('access_token', accessToken, {
@@ -195,21 +171,21 @@ export class AuthService {
   private mapCoreError(error: CoreAuthError): never {
     const { coreCode, httpStatus, traceId } = error;
     if (httpStatus === 401 || coreCode === 'core-1001') {
-      throw Object.assign(
-        new UnauthorizedException('Invalid email or password'),
-        { bffCode: 'bff-2001', traceId },
-      );
+      throw Object.assign(new UnauthorizedException('Invalid email or password'), {
+        bffCode: 'bff-2001',
+        traceId,
+      });
     }
     if (httpStatus === 403 || coreCode === 'core-1002') {
-      throw Object.assign(
-        new ForbiddenException('Account disabled'),
-        { bffCode: 'bff-2002', traceId },
-      );
+      throw Object.assign(new ForbiddenException('Account disabled'), {
+        bffCode: 'bff-2002',
+        traceId,
+      });
     }
-    throw Object.assign(
-      new ServiceUnavailableException('Authentication service unavailable'),
-      { bffCode: 'bff-2099', traceId },
-    );
+    throw Object.assign(new ServiceUnavailableException('Authentication service unavailable'), {
+      bffCode: 'bff-2099',
+      traceId,
+    });
   }
 
   async refresh(
