@@ -8,6 +8,7 @@ export interface EmployeeInfo {
   name: string;
   email: string;
   githubId?: string;
+  oidcSub?: string;
   avatarUrl?: string | null;
   isActive: boolean;
   roles: string[];
@@ -95,6 +96,35 @@ export class CoreConnectorService {
       this.logger.warn(
         `findOrCreateByGithub failed status=${status} code=${code} traceId=${traceId}`,
       );
+      throw new CoreAuthError(code, status, traceId);
+    }
+  }
+
+  /**
+   * Find or create an employee record by OIDC sub (IdP user unique ID).
+   * Mirrors findOrCreateByGithub; Core implements idempotent upsert.
+   */
+  async findOrCreateBySub(profile: {
+    sub: string;
+    email: string;
+    name: string;
+  }): Promise<EmployeeInfo> {
+    const apiKey = this.config.getOrThrow<string>('INTERNAL_API_KEY');
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post<{ code: string; data: EmployeeInfo }>(
+          '/internal/employees/find-or-create-by-oidc',
+          profile,
+          { headers: { INTERNAL_API_KEY: apiKey } },
+        ),
+      );
+      return response.data.data;
+    } catch (error: any) {
+      const status: number = error?.response?.status ?? 503;
+      const code: string = error?.response?.data?.code ?? 'core-9999';
+      const traceId = crypto.randomUUID();
+      this.logger.warn(`findOrCreateBySub failed status=${status} code=${code} traceId=${traceId}`);
       throw new CoreAuthError(code, status, traceId);
     }
   }

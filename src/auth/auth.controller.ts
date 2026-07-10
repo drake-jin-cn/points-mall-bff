@@ -26,6 +26,25 @@ export class AuthController {
     await this.authService.handleGithubCallback({ code, state, error }, res);
   }
 
+  /** OIDC SSO entry point: redirects browser to IdP authorization page */
+  @Public()
+  @Get('sso')
+  async sso(@Res() res: Response) {
+    await this.authService.startSsoLogin(res);
+  }
+
+  /** OIDC SSO callback: IdP redirects here with code + state */
+  @Public()
+  @Get('sso/callback')
+  async ssoCallback(
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
+    @Query('error') error: string | undefined,
+    @Res() res: Response,
+  ) {
+    await this.authService.handleSsoCallback({ code, state, error }, res);
+  }
+
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)

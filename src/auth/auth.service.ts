@@ -82,6 +82,96 @@ export class AuthService {
     }
   }
 
+  /**
+   * OIDC SSO entry: generate authorization URL and redirect to IdP.
+   *
+   * ThirdPartyConnector returns "state|codeVerifier"; BFF splits it:
+   *   - state       → Redis key: oidc:pkce:{state}, used as CSRF guard on callback
+   *   - codeVerifier → Redis value, used to exchange tokens on callback
+   */
+  async startSsoLogin(res: Response): Promise<void> {
+    const frontendUrl = this.config.get<string>('FRONTEND_URL', 'http://localhost:3003');
+    try {
+      const serviceJwt = this.signServiceJwt();
+      const { url, stateWithVerifier } = await this.thirdPartyConnector.getOidcAuthUrl(serviceJwt);
+
+      // Split "state|codeVerifier"
+      const pipeIndex = stateWithVerifier.indexOf('|');
+      const state = stateWithVerifier.substring(0, pipeIndex);
+      const codeVerifier = stateWithVerifier.substring(pipeIndex + 1);
+
+      // Store in Redis: key = state, value = codeVerifier, TTL = 5 min
+      await this.redisService.set(`oidc:pkce:${state}`, codeVerifier, 300);
+
+      res.redirect(url);
+    } catch (error) {
+      this.logger.warn(`OIDC SSO start failed: ${(error as Error).message}`);
+      res.redirect(`${frontendUrl}/login?error=sso_failed`);
+    }
+  }
+
+  /**
+   * OIDC SSO callback: validate state (CSRF guard), exchange id_token, create employee session.
+   */
+  async handleSsoCallback(
+    query: { code?: string; state?: string; error?: string },
+    res: Response,
+  ): Promise<void> {
+    const frontendUrl = this.config.get<string>('FRONTEND_URL', 'http://localhost:3003');
+
+    if (query.error === 'access_denied') {
+      res.redirect(`${frontendUrl}/login?error=sso_cancelled`);
+      return;
+    }
+
+    const stateKey = `oidc:pkce:${query.state ?? ''}`;
+
+    // Retrieve code_verifier from Redis (presence of state key also validates against CSRF)
+    let codeVerifier: string | null;
+    try {
+      codeVerifier = query.state ? await this.redisService.get(stateKey) : null;
+    } catch (error) {
+      this.logger.warn(`Redis error checking OIDC state: ${(error as Error).message}`);
+      res.redirect(`${frontendUrl}/login?error=sso_failed`);
+      return;
+    }
+
+    if (!codeVerifier) {
+      // state missing or expired — CSRF attack or replay attempt
+      res.redirect(`${frontendUrl}/login?error=sso_state_invalid`);
+      return;
+    }
+
+    // Delete state key immediately (one-time use, prevents replay)
+    try {
+      await this.redisService.del(stateKey);
+    } catch (error) {
+      this.logger.warn(`Redis error deleting OIDC state: ${(error as Error).message}`);
+    }
+
+    try {
+      const serviceJwt = this.signServiceJwt();
+      const profile = await this.thirdPartyConnector.exchangeOidcCode(
+        query.code ?? '',
+        codeVerifier,
+        serviceJwt,
+      );
+
+      const employee = await this.coreConnector.findOrCreateBySub({
+        sub: profile.sub,
+        email: profile.email,
+        name: profile.name,
+      });
+
+      await this.issueEmployeeSession(employee, res);
+      // SSO login succeeded — BFF already Set-Cookie, frontend needs no token handling
+      res.redirect(`${frontendUrl}/dashboard`);
+    } catch (error) {
+      this.logger.warn(`OIDC SSO callback failed: ${(error as Error).message}`);
+      res.redirect(`${frontendUrl}/login?error=sso_failed`);
+    }
+  }
+
   async handleGithubCallback(
     query: { code?: string; state?: string; error?: string },
     res: Response,
