@@ -6,6 +6,8 @@ import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { GlobalExceptionFilter } from './common/global-exception.filter';
+import { PermissionsModule } from './permissions/permissions.module';
+import { MenusModule } from './menus/menus.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { GlobalExceptionFilter } from './common/global-exception.filter';
     RedisModule,
     AuthModule,
     HealthModule,
+    PermissionsModule,
+    MenusModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

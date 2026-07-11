@@ -16,6 +16,7 @@ describe('CoreConnectorService', () => {
           provide: HttpService,
           useValue: {
             post: jest.fn(),
+            get: jest.fn(),
           },
         },
         {
@@ -115,5 +116,51 @@ describe('CoreConnectorService', () => {
       httpStatus: 503,
       coreCode: 'core-9999',
     });
+  });
+
+  it('getEmployee fetches the profile by id with INTERNAL_API_KEY header', async () => {
+    const employee = {
+      id: 1,
+      name: 'Admin User',
+      email: 'admin@pointsmall.com',
+      isActive: true,
+      roles: ['ADMIN'],
+    };
+    httpService.get.mockReturnValue(of({ data: { code: 'OK', data: employee } } as any));
+
+    const result = await service.getEmployee(1);
+
+    expect(httpService.get).toHaveBeenCalledWith('/internal/employees/1', {
+      headers: { INTERNAL_API_KEY: 'internal-key' },
+    });
+    expect(result).toEqual(employee);
+  });
+
+  it('getEmployee wraps a 404 in CoreAuthError preserving core-1012', async () => {
+    httpService.get.mockReturnValue(
+      throwError(() => ({ response: { status: 404, data: { code: 'core-1012' } } })),
+    );
+
+    await expect(service.getEmployee(999)).rejects.toBeInstanceOf(CoreAuthError);
+    await expect(service.getEmployee(999)).rejects.toMatchObject({
+      httpStatus: 404,
+      coreCode: 'core-1012',
+    });
+  });
+
+  it('getPermissions requests the comma-joined roles and returns the permission array', async () => {
+    httpService.get.mockReturnValue(
+      of({
+        data: { code: 'OK', data: { permissions: ['dashboard:view', 'admin:menu:manage'] } },
+      } as any),
+    );
+
+    const result = await service.getPermissions(['ADMIN', 'EMPLOYEE']);
+
+    expect(httpService.get).toHaveBeenCalledWith('/internal/permissions', {
+      params: { roles: 'ADMIN,EMPLOYEE' },
+      headers: { INTERNAL_API_KEY: 'internal-key' },
+    });
+    expect(result).toEqual(['dashboard:view', 'admin:menu:manage']);
   });
 });

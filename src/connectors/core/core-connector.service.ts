@@ -128,4 +128,48 @@ export class CoreConnectorService {
       throw new CoreAuthError(code, status, traceId);
     }
   }
+
+  /** Fetch an employee's profile by id (used by GET /employees/me). */
+  async getEmployee(id: number): Promise<EmployeeInfo> {
+    const apiKey = this.config.getOrThrow<string>('INTERNAL_API_KEY');
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get<{ code: string; data: EmployeeInfo }>(`/internal/employees/${id}`, {
+          headers: { INTERNAL_API_KEY: apiKey },
+        }),
+      );
+      return response.data.data;
+    } catch (error: any) {
+      const status: number = error?.response?.status ?? 503;
+      const code: string = error?.response?.data?.code ?? 'core-9999';
+      const traceId = crypto.randomUUID();
+      this.logger.warn(`getEmployee failed status=${status} code=${code} traceId=${traceId}`);
+      throw new CoreAuthError(code, status, traceId);
+    }
+  }
+
+  /** Fetch the deduplicated union of permission keys granted to the given role names. */
+  async getPermissions(roles: string[]): Promise<string[]> {
+    const apiKey = this.config.getOrThrow<string>('INTERNAL_API_KEY');
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get<{ code: string; data: { permissions: string[] } }>(
+          '/internal/permissions',
+          {
+            params: { roles: roles.join(',') },
+            headers: { INTERNAL_API_KEY: apiKey },
+          },
+        ),
+      );
+      return response.data.data.permissions;
+    } catch (error: any) {
+      const status: number = error?.response?.status ?? 503;
+      const code: string = error?.response?.data?.code ?? 'core-9999';
+      const traceId = crypto.randomUUID();
+      this.logger.warn(`getPermissions failed status=${status} code=${code} traceId=${traceId}`);
+      throw new CoreAuthError(code, status, traceId);
+    }
+  }
 }
