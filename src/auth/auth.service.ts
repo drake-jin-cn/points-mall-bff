@@ -252,7 +252,14 @@ export class AuthService {
     res.cookie('access_token', accessToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict',
+      // In production the frontend and BFF are deployed on different subdomains
+      // (e.g. Render's *.onrender.com is a Public Suffix List entry, so each
+      // subdomain is its own "site"), making this a cross-site request from the
+      // browser's cookie policy perspective. SameSite=Strict/Lax would silently
+      // drop the cookie there, so we relax to None (requires Secure, already
+      // true in production). Locally frontend/BFF share the "localhost" site,
+      // so Strict is kept for the extra CSRF protection.
+      sameSite: isProduction ? 'none' : 'strict',
       maxAge: ACCESS_COOKIE_MAX_AGE_MS,
       path: '/',
     });
@@ -316,7 +323,8 @@ export class AuthService {
     res.cookie('access_token', newToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict',
+      // See issueEmployeeSession() for why this differs from Strict in production.
+      sameSite: isProduction ? 'none' : 'strict',
       maxAge: 15 * 60 * 1000,
       path: '/',
     });

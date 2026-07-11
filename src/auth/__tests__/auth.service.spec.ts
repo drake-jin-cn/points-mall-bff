@@ -35,6 +35,7 @@ describe('AuthService', () => {
   let thirdPartyConnector: jest.Mocked<ThirdPartyConnectorService>;
   let redisService: jest.Mocked<RedisService>;
   let jwtService: jest.Mocked<JwtService>;
+  let configService: jest.Mocked<ConfigService>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -98,6 +99,7 @@ describe('AuthService', () => {
     thirdPartyConnector = module.get(ThirdPartyConnectorService);
     redisService = module.get(RedisService);
     jwtService = module.get(JwtService);
+    configService = module.get(ConfigService);
   });
 
   describe('login', () => {
@@ -164,6 +166,31 @@ describe('AuthService', () => {
       const result = await service.login('admin@pointsmall.com', 'pass', undefined, mockResponse());
       expect(JSON.stringify(result)).not.toContain('signed-token');
     });
+
+    it('in production (cross-site deployment): sets sameSite=none + secure=true so the cookie survives a cross-subdomain redirect (e.g. Render)', async () => {
+      (configService.get as jest.Mock).mockImplementation((key: string, fallback?: string) => {
+        const map: Record<string, string> = {
+          JWT_ACCESS_EXPIRES_IN: '15m',
+          JWT_REFRESH_EXPIRES_IN: '7d',
+          NODE_ENV: 'production',
+          FRONTEND_URL: 'http://localhost:3003',
+        };
+        return map[key] ?? fallback;
+      });
+      coreConnector.verifyCredentials.mockResolvedValue({
+        employee: mockEmployee,
+        traceId: 'trace-123',
+      });
+      const res = mockResponse();
+
+      await service.login('admin@pointsmall.com', 'pass', undefined, res);
+
+      expect(res.cookie).toHaveBeenCalledWith(
+        'access_token',
+        'signed-token',
+        expect.objectContaining({ httpOnly: true, secure: true, sameSite: 'none' }),
+      );
+    });
   });
 
   describe('refresh', () => {
@@ -189,6 +216,30 @@ describe('AuthService', () => {
         expect.objectContaining({ httpOnly: true, sameSite: 'strict', path: '/' }),
       );
       expect(result).toEqual({ user: { id: 1, email: 'admin@pointsmall.com', roles: ['ADMIN'] } });
+    });
+
+    it('in production (cross-site deployment): re-issued cookie also uses sameSite=none + secure=true', async () => {
+      (configService.get as jest.Mock).mockImplementation((key: string, fallback?: string) => {
+        const map: Record<string, string> = {
+          JWT_ACCESS_EXPIRES_IN: '15m',
+          JWT_REFRESH_EXPIRES_IN: '7d',
+          NODE_ENV: 'production',
+          FRONTEND_URL: 'http://localhost:3003',
+        };
+        return map[key] ?? fallback;
+      });
+      jwtService.decode.mockReturnValue(fakePayload as any);
+      redisService.exists.mockResolvedValue(true);
+      jwtService.sign.mockReturnValue('new-signed-token' as any);
+      const res = mockResponse();
+
+      await service.refresh('expired-token', res);
+
+      expect(res.cookie).toHaveBeenCalledWith(
+        'access_token',
+        'new-signed-token',
+        expect.objectContaining({ httpOnly: true, secure: true, sameSite: 'none', path: '/' }),
+      );
     });
 
     it('AC-04: Redis key is NOT renewed (exists called, set NOT called)', async () => {
